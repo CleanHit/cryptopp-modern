@@ -26,6 +26,13 @@
 
 ### cryptopp-modern Releases
 
+**2026.10.0** (October 2026) - Argon2 Correction, Ed25519 Small-Order Keys, PQC Stack Wipes (Minor)
+- Fixed Argon2i and Argon2id address indexing; the first segment read the address block from index 0 instead of 2, producing non-standard hashes for affected parameter sets since 2025.11.0, Argon2d unaffected; added `ARGON2I_LEGACY` and `ARGON2ID_LEGACY` for migration and ran the reference vectors in the default test suites (#114, #115)
+- Rejected all small-order Ed25519 public keys during validation, fixing an incomplete check from 2026.5.2 (#112)
+- Ensured ML-DSA and ML-KEM secret stack buffers are wiped on normal exits and exceptions, and cleared additional sensitive intermediates (#113)
+- Kept ML-DSA keys unchanged on failed generation or private-key import (#110)
+- Bounded the LM-OTS hash length before sizing buffers, fixing GCC `-Wstringop-overflow` on ARM-32 (#105, #106); compiled the Apple machine-info helper only on PowerPC (#107)
+
 **2026.9.1** (September 2026) - ARM Acceleration, Apple arm64 Dispatch, HSS Error Paths (Patch)
 - Restored ARM CRC32 and PMULL acceleration in default CMake and GNUmakefile builds; since 2025.12.0 the feature probes could not find `arm_simd.h`, leaving CRC32 and GCM multiplication on the software paths (#91)
 - Enabled hardware AES, PMULL, SHA-1 and SHA-256 on Apple arm64 and detected the optional CRC32, SHA-3 and SHA-512 extensions through `sysctl` (#92, weidai11/cryptopp#1373)
@@ -200,10 +207,10 @@ This is a maintained fork to:
 
 ### cryptopp-modern vs. Upstream Crypto++
 
-| Aspect | Crypto++ 8.9.0 | cryptopp-modern 2026.9.1 |
+| Aspect | Crypto++ 8.9.0 | cryptopp-modern 2026.10.0 |
 |--------|----------------|---------------------------|
-| **Last Release** | October 1, 2023 | September 2026 |
-| **Versioning** | Semantic (8.9.0) | Calendar (2026.9.1) |
+| **Last Release** | October 1, 2023 | October 2026 |
+| **Versioning** | Semantic (8.9.0) | Calendar (2026.10.0) |
 | **BLAKE3** | ❌ | ✅ with AVX-512 (over 4000 MiB/s) |
 | **Argon2** | ❌ | ✅ RFC 9106 |
 | **XAES-256-GCM** | ❌ | ✅ C2SP spec |
@@ -237,6 +244,6 @@ This is a maintained fork to:
 
 ---
 
-**Last Updated:** 2026-09-09
+**Last Updated:** 2026-10-13
 **Fork Point:** Crypto++ 8.9.0 (commit 60f81a77)
-**Current Version:** 2026.9.1
+**Current Version:** 2026.10.0

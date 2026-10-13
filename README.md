@@ -2,7 +2,7 @@
 
 **A maintained, modernized fork of Crypto++ with new algorithms and security improvements**
 
-[![Version](https://img.shields.io/badge/version-2026.9.1-blue.svg)](https://github.com/cryptopp-modern/cryptopp-modern/releases)
+[![Version](https://img.shields.io/badge/version-2026.10.0-blue.svg)](https://github.com/cryptopp-modern/cryptopp-modern/releases)
 [![License](https://img.shields.io/badge/license-Boost-green.svg)](LICENSE)
 
 ---
@@ -24,7 +24,15 @@
 ---
 
 
-## What's New in 2026.9.1
+## What's New in 2026.10.0
+
+- **Argon2i and Argon2id corrected** - The first segment read the address block from index 0 instead of 2, producing non-standard hashes for affected parameter sets since 2025.11.0; Argon2d is unaffected. `ARGON2I_LEGACY` and `ARGON2ID_LEGACY` reproduce the previous output for migration, and the reference vectors run in the default test suites (#114, #115).
+- **Ed25519 small-order keys** - Reject all small-order public keys during validation, fixing an incomplete check from 2026.5.2. Signature verification and X25519 are unchanged (#112).
+- **ML-DSA and ML-KEM stack wipes** - Secret stack buffers are wiped on normal exits and exceptions, and additional sensitive intermediates are cleared (#113).
+- **ML-DSA key state** - Failed key generation or private-key import leaves the previous key unchanged, or a fresh key unset (#110).
+- **Build fixes** - LM-OTS hash length bounded before sizing buffers, fixing GCC `-Wstringop-overflow` on ARM-32 (#106); the Apple machine-info helper is compiled only on PowerPC (#107).
+
+### Previously in 2026.9.1
 
 - **ARM acceleration restored** - The CRC32 and PMULL feature probes could not find `arm_simd.h` since 2025.12.0, so default CMake and GNUmakefile builds left CRC32 and GCM multiplication on the software paths (#91).
 - **Apple arm64 hardware dispatch** - Hardware AES, PMULL, SHA-1 and SHA-256 on Apple Silicon, with the optional CRC32, SHA-3 and SHA-512 extensions detected through `sysctl` (#92).
@@ -39,12 +47,6 @@
 - **PQC key hardening** - A failed BER decode leaves the key unchanged, unset keys refuse to encode (#83), and ML-KEM key generation is transactional (#84).
 - **FileStateStore durability** - The parent directory is flushed when a state file is created on POSIX systems (#78).
 - **Packaging** - `CRYPTOPP_INSTALL_CRYPTEST` installs the `cryptest` tool and its data (#76); pkg-config output handles absolute install directories (#77).
-
-### Previously in 2026.8.1
-
-- **BLAKE3 multi-chunk fixes** - Parent chaining-value byte order on big-endian targets, zero padding of partial final blocks, and an out-of-bounds read in the wide hashing paths (#65). Digests over 1024 bytes from earlier releases may be incorrect; see the release notes.
-- **DEFLATE HLIT rejection** - A malformed stream could trigger an out-of-bounds write in the inflator (#67, weidai11/cryptopp#1368).
-- **Shared-build cryptest fix** - `dynamic_cast` failures against hidden-visibility shared builds, seen on FreeBSD with Clang and libc++ (#64).
 
 ---
 

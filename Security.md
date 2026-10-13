@@ -3,7 +3,7 @@
 ## Supported Versions
 
 Currently supported:
-- 2026.9.1 (current release)
+- 2026.10.0 (current release)
 
 Older releases are not actively supported. Users on earlier versions should upgrade to receive security fixes. We incorporate critical security fixes from upstream Crypto++ and monitor for security issues in the cryptographic algorithms we implement.
 
@@ -21,8 +21,8 @@ Check the fingerprint, import the key, then verify the archive:
 ```sh
 gpg --show-keys --with-fingerprint KEYS
 gpg --import KEYS
-gpg --verify cryptopp-modern-2026.9.1.zip.sig cryptopp-modern-2026.9.1.zip
-gpg --verify cryptopp-modern-2026.9.1.tar.gz.sig cryptopp-modern-2026.9.1.tar.gz
+gpg --verify cryptopp-modern-2026.10.0.zip.sig cryptopp-modern-2026.10.0.zip
+gpg --verify cryptopp-modern-2026.10.0.tar.gz.sig cryptopp-modern-2026.10.0.tar.gz
 ```
 
 Make sure the fingerprint matches the value above before trusting the archive.
@@ -39,6 +39,16 @@ If we receive a report of a security-related bug then we will:
 We will publish details after a fix is available.
 
 ## Security Advisories
+
+### Argon2i and Argon2id non-standard output (fixed in 2026.10.0)
+
+The data-independent addressing in Argon2 read the address block from the wrong position in the first segment, so Argon2i and Argon2id output differed from RFC 9106 for affected parameter sets. Argon2d was not affected.
+
+**Severity:** Correctness and interoperability. No security weakness in the non-standard output is currently known. Affected hashes and derived keys may not match RFC 9106-compliant implementations.
+
+**Affected versions:** 2025.11.0 through 2026.9.1. Fork-local; upstream Crypto++ does not include Argon2.
+
+**Fix:** addresses are indexed by block position and the first address block is generated before the loop. `ARGON2I_LEGACY` and `ARGON2ID_LEGACY` reproduce the previous output for migration: verify stored hashes with the legacy variant and rehash with the standard one on success; decrypt data under keys derived by the legacy variant and re-encrypt. The reference vectors now run in the default test suites (#114, #115).
 
 ### PKCS#1 v1.5 decryption heap buffer overflow (fixed in 2026.9.0)
 
@@ -88,17 +98,19 @@ Both the Donna verifier and the NaCl C API verifier (`crypto_sign_open` in `twee
 
 **Upstream:** addresses the signature-scalar part of upstream Crypto++ issue 1352. Upstream PR weidai11/cryptopp#1355 ports the same fix to Crypto++ master.
 
-### Ed25519 small-order public keys (fixed in 2026.5.2)
+### Ed25519 small-order public keys (partly fixed in 2026.5.2, completed in 2026.10.0)
 
 `ed25519PublicKey::Validate` did not reject small-order Ed25519 public keys. Some downstream consumers rely on `Validate` at level 2 or higher to filter weak keys.
 
 **Severity:** Low. Conformance. Validation-level behaviour only; the verifier itself was not changed.
 
-**Affected versions:** all releases up to and including 2026.5.1.
+**Affected versions:** all releases up to and including 2026.9.1.
 
 **Fix:** `Validate` now rejects small-order public keys at level 2 or higher. The existing canonical encoding check still runs at all validation levels. Level 0 behaviour is unchanged.
 
-**Upstream:** addresses the small-order public key part of upstream Crypto++ issue 1352. Upstream commit weidai11/cryptopp@4775a166 covers the same case on upstream master.
+The 2026.5.2 check was ported from upstream Crypto++ commit weidai11/cryptopp@4775a166, which has the same gap. It compared the key against a table of X25519 values and included the sign bit. It rejected the identity, the point of order 2 and one point of order 4. The other point of order 4, the four points of order 8, and the identity and order-2 point encoded with the sign bit set were still accepted. 2026.10.0 checks the Ed25519 values and ignores the sign bit.
+
+**Upstream:** addresses the small-order public key part of upstream Crypto++ issue 1352. Upstream commit weidai11/cryptopp@4775a166 has the same incomplete check; a port of this fix is pending.
 
 ### BLAKE3 incorrect hashes on AArch64 (fixed in 2026.5.1)
 

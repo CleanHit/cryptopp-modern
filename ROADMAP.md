@@ -1,6 +1,6 @@
 # cryptopp-modern Development Roadmap
 
-**Current Version:** 2026.9.1
+**Current Version:** 2026.10.0
 
 ---
 
@@ -183,6 +183,12 @@ See [FORK.md](FORK.md) for project details and direction.
 ---
 
 ## Version History
+
+### 2026.10.0 (October 2026) - Argon2 Correction, Ed25519 Small-Order Keys, PQC Stack Wipes
+- **Argon2i and Argon2id** - Address block read from index 0 instead of 2 in the first segment since 2025.11.0; standard output corrected, legacy variants for migration, reference vectors in the default suites (#114, #115)
+- **Ed25519 small-order keys** - All small-order public keys rejected during validation, fixing an incomplete check from 2026.5.2 (#112)
+- **PQC stack wipes** - ML-DSA and ML-KEM secret stack buffers wiped on normal exits and exceptions (#113); ML-DSA keys unchanged on failed generation or import (#110)
+- **Builds** - LM-OTS hash-length bound for ARM-32 (#106), Apple machine-info helper only on PowerPC (#107)
 
 ### 2026.9.1 (September 2026) - ARM Acceleration, Apple arm64 Dispatch, HSS Error Paths
 - **ARM acceleration** - CRC32 and PMULL probes could not find `arm_simd.h` since 2025.12.0; hardware paths restored (#91)

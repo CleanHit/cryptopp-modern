@@ -4,6 +4,35 @@ The History file contains the items that comprise the release notes. The
 items in the list below used to be in Readme.txt. Readme.txt now contains the
 last several releases.
 
+2026.10.0 - October 2026
+      - minor release (Argon2i and Argon2id RFC 9106 compatibility, Ed25519
+        small-order validation, ML-DSA and ML-KEM secret handling)
+      - fixed Argon2i and Argon2id address indexing (issue 114, PR 115)
+        * the first segment read addresses from index 0 instead of 2,
+          producing non-standard hashes for affected parameter sets since
+          2025.11.0; Argon2d is unaffected
+        * ARGON2I_LEGACY and ARGON2ID_LEGACY reproduce the previous output
+          for verifying stored hashes and recovering keys
+        * Argon2 vectors now run in the default test suites
+      - rejected all small-order Ed25519 public keys during validation,
+        fixing an incomplete check from 2026.5.2 (PR 112)
+        * the 2026.5.2 check used the X25519 table and included the sign
+          bit; public and private key checks now use the Ed25519 values
+          and ignore the sign bit
+      - ensured ML-DSA and ML-KEM secret stack buffers are wiped on normal
+        exits and exceptions (PR 113)
+        * scope guards so an exception cannot skip the wipes; additional
+          sensitive intermediates are cleared
+      - kept ML-DSA keys unchanged on failed generation or import (PR 110)
+      - bounded the LM-OTS hash length before sizing buffers, fixing GCC
+        -Wstringop-overflow warnings on ARM-32 (issue 105, PR 106)
+      - compiled the Apple machine-info helper only on PowerPC (PR 107)
+      - removed unused ARM SHA-3, SHA-512 and SM3 probes and fixed the
+        configure.sh SHA tests (PR 111)
+      - added ACVP key generation and encapsulation vectors for ML-KEM
+        (PR 108) and regression tests for the HSS and LMS error paths
+        (PR 109)
+
 2026.9.1 - September 2026
       - patch release (ARM acceleration restored, Apple arm64 hardware
         dispatch, HSS error-path fixes, CMake build improvements)
@@ -180,6 +209,7 @@ last several releases.
         * scalar canonicality check added before existing verification path
         * addresses the signature-scalar part of upstream Crypto++ issue 1352
       - rejected small-order Ed25519 public keys at validation level 2 or higher
+        (partial; completed in 2026.10.0)
         * ed25519PublicKey::Validate wires in the existing HasSmallOrder helper
         * level 0 behaviour is unchanged
         * addresses the small-order part of upstream Crypto++ issue 1352
