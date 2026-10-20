@@ -1794,6 +1794,152 @@ bool ValidateCCM()
 	return RunTestDataFile("TestVectors/ccm.txt");
 }
 
+template <class Mode>
+static bool TestAEADResynchronization()
+{
+	typename Mode::Encryption enc;
+	typename Mode::Decryption dec;
+	SecByteBlock key(enc.DefaultKeyLength()), iv(enc.IVSize());
+	for (size_t i = 0; i < key.size(); ++i) key[i] = static_cast<byte>(i);
+	for (size_t i = 0; i < iv.size(); ++i) iv[i] = static_cast<byte>(0x80 + i);
+	byte header[37], message[65], ciphertext[65], tag[16], actual[65], actualTag[16], out[65];
+	for (size_t i = 0; i < sizeof(header); ++i) header[i] = static_cast<byte>(0x20 + i);
+	for (size_t i = 0; i < sizeof(message); ++i) message[i] = static_cast<byte>(0x40 + i);
+	const size_t lengths[][2] = {{8, 2}, {37, 65}, {0, 17}, {17, 0}, {0, 0}};
+	bool pass = true;
+	enc.SetKeyWithIV(key, key.size(), iv, iv.size());
+	dec.SetKeyWithIV(key, key.size(), iv, iv.size());
+
+	for (size_t n = 0; n < COUNTOF(lengths); ++n)
+	{
+		const size_t headerLength = lengths[n][0], messageLength = lengths[n][1];
+		const int ivLength = static_cast<int>(iv.size());
+		iv[0] = static_cast<byte>(n + 1);
+		bool fail = false;
+		try
+		{
+			typename Mode::Encryption reference;
+			reference.SetKeyWithIV(key, key.size(), iv, iv.size());
+			reference.SpecifyDataLengths(headerLength, messageLength);
+			if (headerLength) reference.Update(header, headerLength);
+			if (messageLength) reference.ProcessData(ciphertext, message, messageLength);
+			reference.TruncatedFinal(tag, sizeof(tag));
+
+			// Reuse the same objects with a different nonce and lengths on each pass.
+			enc.EncryptAndAuthenticate(actual, actualTag, sizeof(actualTag), iv, ivLength,
+				header, headerLength, message, messageLength);
+			fail = std::memcmp(actual, ciphertext, messageLength) != 0 ||
+				std::memcmp(actualTag, tag, sizeof(tag)) != 0;
+			bool verified = dec.DecryptAndVerify(out, tag, sizeof(tag), iv, ivLength,
+				header, headerLength, ciphertext, messageLength);
+			fail = !verified || std::memcmp(out, message, messageLength) != 0 || fail;
+
+			// A rejected tag must not prevent the next message from verifying.
+			tag[0] ^= 1;
+			verified = dec.DecryptAndVerify(out, tag, sizeof(tag), iv, ivLength,
+				header, headerLength, ciphertext, messageLength);
+			fail = verified || fail;
+			tag[0] ^= 1;
+			verified = dec.DecryptAndVerify(out, tag, sizeof(tag), iv, ivLength,
+				header, headerLength, ciphertext, messageLength);
+			fail = !verified || std::memcmp(out, message, messageLength) != 0 || fail;
+
+			// Abandon either the header or the payload, then start a one-shot call.
+			for (unsigned int payload = 0; payload != 2; ++payload)
+			{
+				enc.Resynchronize(iv, ivLength);
+				enc.SpecifyDataLengths(sizeof(header), sizeof(message));
+				enc.Update(header, payload ? sizeof(header) : 3);
+				if (payload) enc.ProcessData(actual, message, 17);
+				enc.EncryptAndAuthenticate(actual, actualTag, sizeof(actualTag), iv, ivLength,
+					header, headerLength, message, messageLength);
+				fail = std::memcmp(actual, ciphertext, messageLength) != 0 ||
+					std::memcmp(actualTag, tag, sizeof(tag)) != 0 || fail;
+
+				dec.Resynchronize(iv, ivLength);
+				dec.SpecifyDataLengths(sizeof(header), sizeof(message));
+				dec.Update(header, payload ? sizeof(header) : 3);
+				if (payload) dec.ProcessData(out, message, 17);
+				verified = dec.DecryptAndVerify(out, tag, sizeof(tag), iv, ivLength,
+					header, headerLength, ciphertext, messageLength);
+				fail = !verified || std::memcmp(out, message, messageLength) != 0 || fail;
+			}
+
+			// Explicit resynchronisation before data, after a header and after payload.
+			for (unsigned int state = 0; state != 3; ++state)
+			{
+				enc.Resynchronize(iv, ivLength);
+				enc.SpecifyDataLengths(sizeof(header), sizeof(message));
+				if (state) enc.Update(header, state == 1 ? 3 : sizeof(header));
+				if (state == 2) enc.ProcessData(actual, message, 17);
+				enc.Resynchronize(iv, ivLength);
+				enc.SpecifyDataLengths(headerLength, messageLength);
+				if (headerLength) enc.Update(header, headerLength);
+				if (messageLength) enc.ProcessData(actual, message, messageLength);
+				enc.TruncatedFinal(actualTag, sizeof(actualTag));
+				fail = std::memcmp(actual, ciphertext, messageLength) != 0 ||
+					std::memcmp(actualTag, tag, sizeof(tag)) != 0 || fail;
+			}
+		}
+		catch (const Exception &e)
+		{
+			std::cout << "FAILED   " << enc.AlgorithmName() << ": " << e.what() << "\n";
+			fail = true;
+		}
+		std::cout << (fail ? "FAILED   " : "passed   ") << enc.AlgorithmName()
+			<< " resynchronisation (AAD " << headerLength << ", message " << messageLength << ")\n";
+		pass = !fail && pass;
+	}
+	return pass;
+}
+
+static bool TestEAXResynchronization()
+{
+	// EAX paper, vector 2: check the one-shot path against an external result.
+	const byte key[] = "\x91\x94\x5d\x3f\x4d\xcb\xee\x0b\xf4\x5e\xf5\x22\x55\xf0\x95\xa4";
+	const byte iv[] = "\xbe\xca\xf0\x43\xb0\xa2\x3d\x84\x31\x94\xba\x97\x2c\x66\xde\xbd";
+	const byte header[] = "\xfa\x3b\xfd\x48\x06\xeb\x53\xfa";
+	const byte message[] = "\xf7\xfb";
+	const byte expected[] = "\x19\xdd\x5c\x4c\x93\x31\x04\x9d\x0b\xda\xb0\x27\x74\x08\xf6\x79\x67\xe5";
+	byte ciphertext[2], tag[16], out[2];
+	bool pass = true;
+	try
+	{
+		EAX<AES>::Encryption enc;
+		enc.SetKeyWithIV(key, 16, iv, 16);
+		enc.EncryptAndAuthenticate(ciphertext, tag, sizeof(tag), iv, 16, header, 8, message, 2);
+		pass = std::memcmp(ciphertext, expected, 2) == 0 && std::memcmp(tag, expected + 2, 16) == 0;
+		EAX<AES>::Decryption dec;
+		dec.SetKeyWithIV(key, 16, iv, 16);
+		const bool verified = dec.DecryptAndVerify(out, expected + 2, 16, iv, 16, header, 8, expected, 2);
+		pass = verified && std::memcmp(out, message, 2) == 0 && pass;
+	}
+	catch (const Exception &) { pass = false; }
+	std::cout << (pass ? "passed   " : "FAILED   ") << "EAX one-shot published vector\n";
+
+	// Without Restart, these two histories hash the same nonce transcript:
+	// tweak1 || tweak0 || (zero block || nonce) == tweak1 || zero block || tweak0 || nonce.
+	bool fail = false;
+	try
+	{
+		byte initA[16] = {1}, initB[16] = {2}, shortIV[16] = {3}, longIV[32] = {0};
+		byte zero[16] = {0}, plain[32] = {0}, first[32], second[32];
+		std::memcpy(longIV + 16, shortIV, sizeof(shortIV));
+		EAX<AES>::Encryption firstEnc, secondEnc;
+		firstEnc.SetKeyWithIV(key, 16, initA, sizeof(initA));
+		firstEnc.Resynchronize(longIV, sizeof(longIV));
+		secondEnc.SetKeyWithIV(key, 16, initB, sizeof(initB));
+		secondEnc.Update(zero, sizeof(zero));
+		secondEnc.Resynchronize(shortIV, sizeof(shortIV));
+		firstEnc.ProcessData(first, plain, sizeof(plain));
+		secondEnc.ProcessData(second, plain, sizeof(plain));
+		fail = std::memcmp(first, second, sizeof(first)) == 0;
+	}
+	catch (const Exception &) { fail = true; }
+	std::cout << (fail ? "FAILED   " : "passed   ") << "EAX abandoned header cannot alias a different nonce\n";
+	return !fail && pass;
+}
+
 bool ValidateGCM()
 {
 	std::cout << "\nAES/GCM validation suite running...\n";
@@ -1801,6 +1947,14 @@ bool ValidateGCM()
 	bool pass = RunTestDataFile("TestVectors/gcm.txt", MakeParameters(Name::TableSize(), (int)2048));
 	std::cout << "\n64K tables:";
 	pass = RunTestDataFile("TestVectors/gcm.txt", MakeParameters(Name::TableSize(), (int)64*1024)) && pass;
+
+	std::cout << "\nAEAD resynchronisation:\n\n";
+	pass = TestAEADResynchronization<EAX<AES> >() && pass;
+	pass = TestAEADResynchronization<GCM<AES> >() && pass;
+	pass = TestAEADResynchronization<CCM<AES, 16> >() && pass;
+	pass = TestAEADResynchronization<ChaCha20Poly1305>() && pass;
+	pass = TestAEADResynchronization<XChaCha20Poly1305>() && pass;
+	pass = TestEAXResynchronization() && pass;
 
 	// Regression coverage for zero-length AEAD tags (upstream issue #1364).
 	std::cout << "\nAEAD zero-length tag rejection:\n\n";
@@ -1997,6 +2151,7 @@ bool ValidateAES_CTR_HMAC()
 {
 	std::cout << "\nAES-CTR-HMAC validation suite running...\n\n";
 	bool pass = true, fail;
+	pass = TestAEADResynchronization<AES_CTR_HMAC_SHA256>() && pass;
 
 	// Test 1: Algorithm name
 	{
